@@ -20,12 +20,12 @@ public sealed class InMemoryTenantLogLevelStore : ITenantLogLevelStore, IDisposa
     private readonly ConcurrentDictionary<string, TenantLogLevelEntry> _tenantLevels = new(StringComparer.OrdinalIgnoreCase);
     private readonly TenantLogLevelStoreOptions _options;
     private readonly Counter<long> _expiredEntriesCounter;
-    private readonly IDisposable _storeSizeGauge;
+    private readonly ObservableGauge<long> _storeSizeGauge;
     private readonly Timer? _cleanupTimer;
     private readonly Counter<long> _internalErrorsCounter;
 
     public InMemoryTenantLogLevelStore()
-        : this(Options.Create(new TenantLogLevelStoreOptions()))
+        : this(Microsoft.Extensions.Options.Options.Create(new TenantLogLevelStoreOptions()))
     {
     }
 
@@ -122,7 +122,6 @@ public sealed class InMemoryTenantLogLevelStore : ITenantLogLevelStore, IDisposa
     public void Dispose()
     {
         _cleanupTimer?.Dispose();
-        _storeSizeGauge.Dispose();
     }
 
     private IEnumerable<Measurement<long>> ObserveStoreSize()
