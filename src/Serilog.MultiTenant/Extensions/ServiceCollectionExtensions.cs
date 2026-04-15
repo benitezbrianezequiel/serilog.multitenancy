@@ -13,10 +13,12 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         LogEventLevel baseLevel,
         Action<TenantLoggingOptions>? configureTenantLogging = null,
-        Action<TenantLogContextMiddlewareOptions>? configureTenantLogContext = null)
+        Action<TenantLogContextMiddlewareOptions>? configureTenantLogContext = null,
+        Action<TenantLogLevelStoreOptions>? configureTenantLogLevelStore = null)
     {
         services.AddOptions<TenantLoggingOptions>();
         services.AddOptions<TenantLogContextMiddlewareOptions>();
+        services.AddOptions<TenantLogLevelStoreOptions>();
 
         services.AddSingleton<IBaseLogLevelProvider>(_ => new FixedBaseLogLevelProvider(baseLevel));
         services.AddSingleton<ITenantLogLevelStore, InMemoryTenantLogLevelStore>();
@@ -34,6 +36,11 @@ public static class ServiceCollectionExtensions
         if (configureTenantLogContext is not null)
         {
             services.Configure(configureTenantLogContext);
+        }
+
+        if (configureTenantLogLevelStore is not null)
+        {
+            services.Configure(configureTenantLogLevelStore);
         }
 
         return services;
