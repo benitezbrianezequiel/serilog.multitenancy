@@ -54,30 +54,39 @@ public sealed class InMemoryTenantLogLevelStore : ITenantLogLevelStore, IDisposa
             return false;
         }
 
-        if (!_tenantLevels.TryGetValue(tenantId, out var entry))
+        const int maxRefreshAttempts = 8;
+
+        for (var attempt = 0; attempt < maxRefreshAttempts; attempt++)
         {
-            level = default;
-            return false;
+            if (!_tenantLevels.TryGetValue(tenantId, out var entry))
+            {
+                level = default;
+                return false;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            if (entry.ExpiresAtUtc <= now)
+            {
+                RemoveExpired(tenantId, entry, now);
+                level = default;
+                return false;
+            }
+
+            var updatedEntry = entry with
+            {
+                LastAccessedUtc = now,
+                ExpiresAtUtc = now + _options.EntryTtl
+            };
+
+            if (_tenantLevels.TryUpdate(tenantId, updatedEntry, entry))
+            {
+                level = updatedEntry.Level;
+                return true;
+            }
         }
 
-        var now = DateTimeOffset.UtcNow;
-        if (entry.ExpiresAtUtc <= now)
-        {
-            RemoveExpired(tenantId);
-            level = default;
-            return false;
-        }
-
-        var updatedEntry = entry with
-        {
-            LastAccessedUtc = now,
-            ExpiresAtUtc = now + _options.EntryTtl
-        };
-
-        _tenantLevels.TryUpdate(tenantId, updatedEntry, entry);
-
-        level = entry.Level;
-        return true;
+        level = default;
+        return false;
     }
 
     public void Set(string tenantId, LogEventLevel level)
@@ -156,16 +165,15 @@ public sealed class InMemoryTenantLogLevelStore : ITenantLogLevelStore, IDisposa
         {
             if (pair.Value.ExpiresAtUtc <= now)
             {
-                RemoveExpired(pair.Key);
+                RemoveExpired(pair.Key, pair.Value, now);
             }
         }
     }
 
-    private void RemoveExpired(string tenantId)
+    private void RemoveExpired(string tenantId, TenantLogLevelEntry entry, DateTimeOffset now)
     {
-        if (_tenantLevels.TryGetValue(tenantId, out var existing)
-            && existing.ExpiresAtUtc <= DateTimeOffset.UtcNow
-            && _tenantLevels.TryRemove(new KeyValuePair<string, TenantLogLevelEntry>(tenantId, existing)))
+        if (entry.ExpiresAtUtc <= now
+            && _tenantLevels.TryRemove(new KeyValuePair<string, TenantLogLevelEntry>(tenantId, entry)))
         {
             _expiredEntriesCounter.Add(1);
         }
